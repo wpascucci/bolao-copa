@@ -1,79 +1,111 @@
 import streamlit as st
 import pandas as pd
+import firebase_admin
+from firebase_admin import credentials, firestore
+import json
+
+# --- CONFIGURAÇÃO DO FIREBASE ---
+# Para rodar localmente ou na nuvem de forma segura, usamos os Secrets do Streamlit
+if not firebase_admin._apps:
+    # Carrega as credenciais vindas do segredo do Streamlit
+    try:
+        firebase_creds = json.loads(st.secrets["firebase_credentials"])
+        cred = credentials.Certificate(firebase_creds)
+        firebase_admin.initialize_app(cred)
+    except Exception as e:
+        st.error("Erro ao carregar as credenciais do Firebase. Verifique as configurações de Secrets.")
+
+# Inicializa o cliente do Firestore
+try:
+    db = firestore.client()
+except Exception:
+    st.warning("Banco de dados não conectado. Verifique a configuração.")
 
 # --- LÓGICA DE PONTUAÇÃO ---
 def calcular_pontos_partida(palpite_A, palpite_B, real_A, real_B):
-    pontos = 0
-    
-    # Determinar Vencedores
     vencedor_palpite = 'A' if palpite_A > palpite_B else 'B' if palpite_B > palpite_A else 'Empate'
     vencedor_real = 'A' if real_A > real_B else 'B' if real_B > real_A else 'Empate'
     
-    # 1. Placar Exato (Maior Pontuação: Ex: 25 pts)
     if palpite_A == real_A and palpite_B == real_B:
         return 25 
         
-    # 2 e 3. Acertou o Vencedor (ou o Empate)
+    pontos = 0
     if vencedor_palpite == vencedor_real:
-        pontos += 10 # Pontuação base por acertar quem ganha (ou se empatou)
-        
-        # Acertou o Vencedor + Gols do Vencedor
+        pontos += 10
         if (vencedor_real == 'A' and palpite_A == real_A) or \
            (vencedor_real == 'B' and palpite_B == real_B):
             pontos += 5 
             
-    # 4. Acertou o Placar do Perdedor (Pontuação Mínima: Ex: 2 pts)
     if (vencedor_real == 'A' and palpite_B == real_B) or \
        (vencedor_real == 'B' and palpite_A == real_A):
         pontos += 2
 
     return pontos
 
-def calcular_bonus_artilheiros(palpites_gols, gols_reais_jogadores):
-    """
-    Esta função deve ser chamada apenas quando a seleção for eliminada ou campeã.
-    Compara os gols previstos para cada jogador com os gols reais do torneio.
-    """
-    pontos_bonus = 0
-    for jogador, gols_previstos in palpites_gols.items():
-        if jogador in gols_reais_jogadores and gols_previstos == gols_reais_jogadores[jogador]:
-            pontos_bonus += 20 # Bônus alto por acertar os gols exatos do jogador
-    return pontos_bonus
-
 # --- INTERFACE DO APLICATIVO ---
-st.title("🏆 Bolão da Copa do Mundo")
-st.write("Insira seus palpites de placar e artilheiros abaixo.")
+st.title("🏆 Bolão Permanente da Copa")
 
-st.header("⚽ Palpite do Jogo")
-col1, col2, col3 = st.columns(3)
+# Identificação do Participante
+st.header("👤 Quem está dando o palpite?")
+nome_participante = st.text_input("Digite seu nome completo ou apelido:", key="nome_user").strip()
 
-with col1:
-    st.subheader("Brasil")
-    palpite_brasil = st.number_input("Gols do Brasil", min_value=0, step=1, key="gols_br")
+if nome_participante:
+    st.write(f"Olá, **{nome_participante}**! Preencha seus palpites abaixo:")
+    
+    st.header("⚽ Palpite do Jogo")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.subheader("Brasil")
+        palpite_brasil = st.number_input("Gols do Brasil", min_value=0, step=1, key="g_br")
+    with col2:
+        st.markdown("<h3 style='text-align: center;'>X</h3>", unsafe_allow_html=True)
+    with col3:
+        st.subheader("Argentina")
+        palpite_argentina = st.number_input("Gols da Argentina", min_value=0, step=1, key="g_ar")
 
-with col2:
-    st.markdown("<h3 style='text-align: center;'>X</h3>", unsafe_allow_html=True)
+    st.header("👟 Palpite de Artilheiros")
+    st.write("Insira os gols previstos para os jogadores (Isso compõe o bônus de eliminação/campeão):")
+    
+    # Exemplo simples de estrutura de artilheiros
+    jogador_1 = st.text_input("Nome do Jogador 1 (Ex: Neymar)", key="j1")
+    gols_j1 = st.number_input("Gols do Jogador 1 no campeonato", min_value=0, step=1, key="gj1")
+    
+    if st.button("💾 Salvar Meu Palpite Permanentemente"):
+        # Estrutura dos dados que vão para o Firebase
+        dados_palpite = {
+            "nome": nome_participante,
+            "palpite_brasil": palpite_brasil,
+            "palpite_argentina": palpite_argentina,
+            "artilheiros": {
+                jogador_1: gols_j1
+            } if jogador_1 else {}
+        }
+        
+        # Salva ou atualiza o documento no Firestore usando o nome do participante como ID único
+        db.collection("palpites").document(nome_participante).set(dados_palpite)
+        st.success(f"Palpite de {nome_participante} gravado com sucesso no banco de dados!")
 
-with col3:
-    st.subheader("Argentina")
-    palpite_argentina = st.number_input("Gols da Argentina", min_value=0, step=1, key="gols_ar")
-
-st.header("👟 Palpite de Gols por Jogador")
-st.write("Quem fará os gols do seu palpite?")
-jogador_nome = st.text_input("Nome do Jogador")
-jogador_gols = st.number_input("Quantidade de gols na partida", min_value=1, step=1)
-
-if st.button("Salvar Palpite"):
-    st.success("Palpite registrado com sucesso! (Nesta versão demonstração, os dados somem ao recarregar a página).")
+else:
+    st.info("Insira seu nome no campo acima para liberar o formulário de palpites.")
 
 st.divider()
 
-st.header("📊 Simulador de Resultados (Admin)")
-st.write("Simule o resultado real da partida para ver a lógica de pontuação funcionando:")
-col_r1, col_r2 = st.columns(2)
-real_br = col_r1.number_input("Resultado Real: Brasil", min_value=0, step=1)
-real_ar = col_r2.number_input("Resultado Real: Argentina", min_value=0, step=1)
-
-if st.button("Calcular Minha Pontuação"):
-    pontuacao = calcular_pontos_partida(palpite_brasil, palpite_argentina, real_br, real_ar)
-    st.info(f"Sua pontuação neste jogo seria: **{pontuacao} pontos**!")
+# --- VER TODOS OS PALPITES SALVOS (RANKING / LISTA) ---
+st.header("📊 Palpites Cadastrados")
+if st.button("🔄 Atualizar Lista de Palpites"):
+    palpites_ref = db.collection("palpites").stream()
+    lista_palpites = []
+    
+    for doc in palpites_ref:
+        dados = doc.to_dict()
+        lista_palpites.append({
+            "Participante": dados.get("nome"),
+            "Brasil": dados.get("palpite_brasil"),
+            "Argentina": dados.get("palpite_argentina")
+        })
+    
+    if lista_palpites:
+        df = pd.DataFrame(lista_palpites)
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.warning("Nenhum palpite encontrado no banco de dados ainda.")
