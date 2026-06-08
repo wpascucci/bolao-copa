@@ -135,9 +135,26 @@ def calcular_desempenho(palpite, oficial):
     vp = 'A' if p_a > p_b else 'B' if p_b > p_a else 'E'
     vo = 'A' if o_a > o_b else 'B' if o_b > o_a else 'E'
     
-    if p_a == o_a and p_b == o_b: pts += 25; stats["exato"] = 1
+    if p_a == o_a and p_b == o_b: 
+        pts += 25
+        stats["exato"] = 1
     else:
         if vp == vo:
-            pts += 10; stats["vencedor"] = 1
-            if (vo == 'A' and p_a == o_a) or (vo == 'B' and p_b == o_b): pts += 5
-        if (vo == 'A' and p_b == o_b) or (vo == 'B' and p_a == o
+            pts += 10
+            stats["vencedor"] = 1
+            if (vo == 'A' and p_a == o_a) or (vo == 'B' and p_b == o_b): 
+                pts += 5
+        if (vo == 'A' and p_b == o_b) or (vo == 'B' and p_a == o_a): 
+            pts += 2
+            stats["perdedor"] = 1
+
+    art_p = [a.strip().lower() for a in palpite.get('artilheiros_a', []) + palpite.get('artilheiros_b', []) if a]
+    art_o = [a.strip().lower() for a in oficial.get('artilheiros_a', []) + oficial.get('artilheiros_b', []) if a]
+    
+    for jg in art_p:
+        if jg in art_o: 
+            pts += 5
+            stats["artilheiro"] += 1
+            art_o.remove(jg) 
+            
+    return pts, stats
