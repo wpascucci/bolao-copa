@@ -24,17 +24,20 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- CONEXÃO COM FIREBASE ---
+# --- CONEXÃO COM FIREBASE CORRIGIDA ---
 @st.cache_resource
 def init_firebase():
-    if not firebase_admin._apps:
-        try:
+    try:
+        # Tenta carregar as credenciais se existirem
+        if not firebase_admin._apps:
             firebase_creds = json.loads(st.secrets["firebase_credentials"])
             cred = credentials.Certificate(firebase_creds)
             firebase_admin.initialize_app(cred)
-        except Exception:
-            return None
-    return firestore.client()
+        # Retorna o banco de dados se der tudo certo
+        return firestore.client()
+    except Exception:
+        # Se não tiver senha ou der erro, retorna None para rodar sem banco de dados
+        return None
 
 db = init_firebase()
 
