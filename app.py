@@ -1,111 +1,161 @@
 import streamlit as st
-import pandas as pd
+import json
 import firebase_admin
 from firebase_admin import credentials, firestore
-import json
 
-# --- CONFIGURAÇÃO DO FIREBASE ---
-# Para rodar localmente ou na nuvem de forma segura, usamos os Secrets do Streamlit
-if not firebase_admin._apps:
-    # Carrega as credenciais vindas do segredo do Streamlit
-    try:
-        firebase_creds = json.loads(st.secrets["firebase_credentials"])
-        cred = credentials.Certificate(firebase_creds)
-        firebase_admin.initialize_app(cred)
-    except Exception as e:
-        st.error("Erro ao carregar as credenciais do Firebase. Verifique as configurações de Secrets.")
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="Admin Bolão 2026", page_icon="🏆", layout="centered")
 
-# Inicializa o cliente do Firestore
-try:
-    db = firestore.client()
-except Exception:
-    st.warning("Banco de dados não conectado. Verifique a configuração.")
+# --- CONEXÃO COM FIREBASE ---
+@st.cache_resource
+def init_firebase():
+    if not firebase_admin._apps:
+        try:
+            firebase_creds = json.loads(st.secrets["firebase_credentials"])
+            cred = credentials.Certificate(firebase_creds)
+            firebase_admin.initialize_app(cred)
+        except Exception as e:
+            return None
+    return firestore.client()
 
-# --- LÓGICA DE PONTUAÇÃO ---
-def calcular_pontos_partida(palpite_A, palpite_B, real_A, real_B):
-    vencedor_palpite = 'A' if palpite_A > palpite_B else 'B' if palpite_B > palpite_A else 'Empate'
-    vencedor_real = 'A' if real_A > real_B else 'B' if real_B > real_A else 'Empate'
+db = init_firebase()
+
+# --- DADOS DE EXEMPLO (JOGOS DA COPA) ---
+# Em um cenário real, você buscaria isso de uma API ou do próprio banco de dados
+JOGOS_2026 = [
+    {"id": "jogo_01", "data": "11 Junho", "fase": "Abertura", "local": "Estádio Azteca", "time_a": "MEX", "time_b": "POL", "hora": "15:00"},
+    {"id": "jogo_02", "data": "13 Junho", "fase": "Fase de Grupos", "local": "MetLife Stadium", "time_a": "BRA", "time_b": "MAR", "hora": "19:00"},
+    {"id": "jogo_03", "data": "13 Junho", "fase": "Fase de Grupos", "local": "Gillette Stadium", "time_a": "HAI", "time_b": "SCO", "hora": "22:00"},
+    {"id": "jogo_04", "data": "14 Junho", "fase": "Fase de Grupos", "local": "NRG Stadium", "time_a": "GER", "time_b": "CUW", "hora": "14:00"},
+]
+
+# --- GERENCIAMENTO DE ESTADO ---
+if "tela_atual" not in st.session_state:
+    st.session_state.tela_atual = "lista_jogos"
+if "jogo_selecionado" not in st.session_state:
+    st.session_state.jogo_selecionado = None
+
+# --- FUNÇÕES DE NAVEGAÇÃO ---
+def ir_para_detalhe(jogo):
+    st.session_state.jogo_selecionado = jogo
+    st.session_state.tela_atual = "detalhe_jogo"
+
+def voltar_para_lista():
+    st.session_state.jogo_selecionado = None
+    st.session_state.tela_atual = "lista_jogos"
+
+# --- TELA 1: LISTA DE JOGOS ---
+def mostrar_lista_jogos():
+    st.title("Lista de Partidas")
+    st.write("Selecione um jogo para lançar o placar e os artilheiros oficiais.")
     
-    if palpite_A == real_A and palpite_B == real_B:
-        return 25 
+    if db is None:
+        st.warning("⚠️ Firebase não conectado. O aplicativo funcionará de forma visual, mas não salvará os dados. Configure os Secrets no Streamlit Cloud.")
+
+    data_atual = ""
+    for jogo in JOGOS_2026:
+        # Agrupamento por data (visual)
+        if jogo["data"] != data_atual:
+            data_atual = jogo["data"]
+            st.markdown(f"#### 📅 {data_atual} • {jogo['fase']}")
+            st.divider()
         
-    pontos = 0
-    if vencedor_palpite == vencedor_real:
-        pontos += 10
-        if (vencedor_real == 'A' and palpite_A == real_A) or \
-           (vencedor_real == 'B' and palpite_B == real_B):
-            pontos += 5 
+        # Card do Jogo
+        with st.container():
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col1:
+                st.caption(f"{jogo['hora']} | {jogo['local']}")
+            with col2:
+                st.markdown(f"<h4 style='text-align: center;'>{jogo['time_a']}  X  {jogo['time_b']}</h4>", unsafe_allow_html=True)
+            with col3:
+                # Botão que muda o estado da aplicação
+                st.button("Lançar Resultado", key=f"btn_{jogo['id']}", on_click=ir_para_detalhe, args=(jogo,), use_container_width=True)
+        st.write("") # Espaçamento
+
+# --- TELA 2: INSERÇÃO DE DADOS DO JOGO ---
+def mostrar_detalhe_jogo():
+    jogo = st.session_state.jogo_selecionado
+    
+    st.button("⬅ Voltar", on_click=voltar_para_lista)
+    
+    st.title("Inserção de Dados")
+    st.caption(f"{jogo['fase']} • {jogo['data']} • {jogo['local']}")
+    
+    # 1. Placar
+    st.subheader(f"Placar Final: {jogo['time_a']} vs {jogo['time_b']}")
+    col_a, col_x, col_b = st.columns([2, 1, 2])
+    
+    with col_a:
+        gols_a = st.number_input(f"Gols do(a) {jogo['time_a']}", min_value=0, step=1, value=0)
+    with col_x:
+        st.markdown("<h2 style='text-align: center; margin-top: 20px;'>X</h2>", unsafe_allow_html=True)
+    with col_b:
+        gols_b = st.number_input(f"Gols do(a) {jogo['time_b']}", min_value=0, step=1, value=0)
+
+    st.divider()
+
+    # 2. Artilheiros (Campos gerados dinamicamente com base no placar numérico)
+    st.subheader("Artilheiros da Partida")
+    
+    artilheiros_a = []
+    artilheiros_b = []
+
+    col_art_a, col_art_b = st.columns(2)
+    
+    with col_art_a:
+        st.markdown(f"**Gols do(a) {jogo['time_a']}: {gols_a}**")
+        if gols_a == 0:
+            st.info("Nenhum gol marcado.")
+        for i in range(gols_a):
+            nome = st.text_input(f"Autor do {i+1}º gol ({jogo['time_a']})", key=f"art_a_{i}")
+            if nome:
+                artilheiros_a.append(nome)
+
+    with col_art_b:
+        st.markdown(f"**Gols do(a) {jogo['time_b']}: {gols_b}**")
+        if gols_b == 0:
+            st.info("Nenhum gol marcado.")
+        for i in range(gols_b):
+            nome = st.text_input(f"Autor do {i+1}º gol ({jogo['time_b']})", key=f"art_b_{i}")
+            if nome:
+                artilheiros_b.append(nome)
+
+    st.divider()
+    
+    # 3. Botão de Salvar
+    if st.button("💾 Salvar Resultado no Banco de Dados", type="primary", use_container_width=True):
+        
+        # Validação básica
+        if len(artilheiros_a) != gols_a or len(artilheiros_b) != gols_b:
+            st.error("⚠️ Atenção: Preencha o nome de todos os artilheiros antes de salvar.")
+        else:
+            dados_partida = {
+                "id_partida": jogo['id'],
+                "placar": {
+                    jogo['time_a']: gols_a,
+                    jogo['time_b']: gols_b
+                },
+                "artilheiros": {
+                    jogo['time_a']: artilheiros_a,
+                    jogo['time_b']: artilheiros_b
+                },
+                "status": "encerrada"
+            }
             
-    if (vencedor_real == 'A' and palpite_B == real_B) or \
-       (vencedor_real == 'B' and palpite_A == real_A):
-        pontos += 2
+            # Salvar no Firebase
+            if db:
+                try:
+                    db.collection("partidas_encerradas").document(jogo['id']).set(dados_partida)
+                    st.success("✅ Resultado salvo com sucesso no Firebase! O ranking será atualizado.")
+                    # Poderia chamar a função de processar pontuações dos usuários aqui
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+            else:
+                st.success("✅ Resultado registrado (Modo Demonstração).")
+                st.json(dados_partida)
 
-    return pontos
-
-# --- INTERFACE DO APLICATIVO ---
-st.title("🏆 Bolão Permanente da Copa")
-
-# Identificação do Participante
-st.header("👤 Quem está dando o palpite?")
-nome_participante = st.text_input("Digite seu nome completo ou apelido:", key="nome_user").strip()
-
-if nome_participante:
-    st.write(f"Olá, **{nome_participante}**! Preencha seus palpites abaixo:")
-    
-    st.header("⚽ Palpite do Jogo")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.subheader("Brasil")
-        palpite_brasil = st.number_input("Gols do Brasil", min_value=0, step=1, key="g_br")
-    with col2:
-        st.markdown("<h3 style='text-align: center;'>X</h3>", unsafe_allow_html=True)
-    with col3:
-        st.subheader("Argentina")
-        palpite_argentina = st.number_input("Gols da Argentina", min_value=0, step=1, key="g_ar")
-
-    st.header("👟 Palpite de Artilheiros")
-    st.write("Insira os gols previstos para os jogadores (Isso compõe o bônus de eliminação/campeão):")
-    
-    # Exemplo simples de estrutura de artilheiros
-    jogador_1 = st.text_input("Nome do Jogador 1 (Ex: Neymar)", key="j1")
-    gols_j1 = st.number_input("Gols do Jogador 1 no campeonato", min_value=0, step=1, key="gj1")
-    
-    if st.button("💾 Salvar Meu Palpite Permanentemente"):
-        # Estrutura dos dados que vão para o Firebase
-        dados_palpite = {
-            "nome": nome_participante,
-            "palpite_brasil": palpite_brasil,
-            "palpite_argentina": palpite_argentina,
-            "artilheiros": {
-                jogador_1: gols_j1
-            } if jogador_1 else {}
-        }
-        
-        # Salva ou atualiza o documento no Firestore usando o nome do participante como ID único
-        db.collection("palpites").document(nome_participante).set(dados_palpite)
-        st.success(f"Palpite de {nome_participante} gravado com sucesso no banco de dados!")
-
-else:
-    st.info("Insira seu nome no campo acima para liberar o formulário de palpites.")
-
-st.divider()
-
-# --- VER TODOS OS PALPITES SALVOS (RANKING / LISTA) ---
-st.header("📊 Palpites Cadastrados")
-if st.button("🔄 Atualizar Lista de Palpites"):
-    palpites_ref = db.collection("palpites").stream()
-    lista_palpites = []
-    
-    for doc in palpites_ref:
-        dados = doc.to_dict()
-        lista_palpites.append({
-            "Participante": dados.get("nome"),
-            "Brasil": dados.get("palpite_brasil"),
-            "Argentina": dados.get("palpite_argentina")
-        })
-    
-    if lista_palpites:
-        df = pd.DataFrame(lista_palpites)
-        st.dataframe(df, use_container_width=True)
-    else:
-        st.warning("Nenhum palpite encontrado no banco de dados ainda.")
+# --- ROTEAMENTO (ROUTER) ---
+if st.session_state.tela_atual == "lista_jogos":
+    mostrar_lista_jogos()
+elif st.session_state.tela_atual == "detalhe_jogo":
+    mostrar_detalhe_jogo()
