@@ -3,202 +3,171 @@ import json
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# --- CONFIGURAÇÃO DA PÁGINA (Deve ser a primeira linha) ---
-st.set_page_config(page_title="Bolão Copa 2026", page_icon="🏆", layout="centered")
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="Bolão Copa 2026", page_icon="🏆", layout="wide")
 
-# --- CUSTOM CSS PARA MELHORAR A UX ---
+# --- CUSTOM CSS ---
 st.markdown("""
     <style>
-    .stButton>button {
-        border-radius: 20px;
-        font-weight: bold;
-    }
-    .placar-box {
-        text-align: center;
-        font-size: 24px;
-        font-weight: bold;
-        background-color: #f0f2f6;
-        padding: 10px;
-        border-radius: 10px;
-    }
+    .stButton>button { border-radius: 8px; font-weight: bold; }
+    .locked-box { background-color: #e8f0fe; padding: 15px; border-radius: 10px; border-left: 5px solid #1a73e8; margin-bottom: 15px;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- CONEXÃO COM FIREBASE CORRIGIDA ---
+# --- CONEXÃO COM FIREBASE ---
 @st.cache_resource
 def init_firebase():
     try:
-        # Tenta carregar as credenciais se existirem
         if not firebase_admin._apps:
             firebase_creds = json.loads(st.secrets["firebase_credentials"])
             cred = credentials.Certificate(firebase_creds)
             firebase_admin.initialize_app(cred)
-        # Retorna o banco de dados se der tudo certo
         return firestore.client()
     except Exception:
-        # Se não tiver senha ou der erro, retorna None para rodar sem banco de dados
         return None
 
 db = init_firebase()
 
-# --- DADOS REAIS DA COPA 2026 ---
-GRUPOS_2026 = {
-    "A": ["México (MEX)", "África do Sul (RSA)", "Coreia do Sul (KOR)", "República Tcheca (CZE)"],
-    "B": ["Canadá (CAN)", "Bósnia e Herze. (BIH)", "Catar (QAT)", "Suíça (SUI)"],
-    "C": ["Brasil (BRA)", "Marrocos (MAR)", "Haiti (HAI)", "Escócia (SCO)"],
-    "D": ["Estados Unidos (USA)", "Paraguai (PAR)", "Austrália (AUS)", "Turquia (TUR)"],
-    "E": ["Alemanha (GER)", "Curaçao (CUW)", "Costa do Marfim (CIV)", "Equador (ECU)"],
-    "F": ["Holanda (NED)", "Japão (JPN)", "Suécia (SWE)", "Tunísia (TUN)"],
-    "G": ["Bélgica (BEL)", "Egito (EGY)", "Irã (IRN)", "Nova Zelândia (NZL)"],
-    "H": ["Espanha (ESP)", "Cabo Verde (CPV)", "Arábia Saudita (KSA)", "Uruguai (URU)"],
-    "I": ["França (FRA)", "Senegal (SEN)", "Iraque (IRQ)", "Noruega (NOR)"],
-    "J": ["Argentina (ARG)", "Argélia (ALG)", "Áustria (AUT)", "Jordânia (JOR)"],
-    "K": ["Portugal (POR)", "RD Congo (COD)", "Uzbequistão (UZB)", "Colômbia (COL)"],
-    "L": ["Inglaterra (ENG)", "Croácia (CRO)", "Gana (GHA)", "Panamá (PAN)"]
-}
+# --- ESTRUTURA DA COPA 2026 (Exemplo reduzido para o motor funcionar) ---
+FASES_COPA = ["Grupos", "16 Avos", "Oitavas", "Quartas", "Semifinal", "Final"]
 
-# Gerador automático da tabela (Fase de Grupos)
-def gerar_tabela():
-    jogos = []
-    id_jogo = 1
-    for grupo, times in GRUPOS_2026.items():
-        # Rodada 1
-        jogos.append({"id": f"g{grupo}_{id_jogo}", "grupo": grupo, "rodada": 1, "time_a": times[0], "time_b": times[1]})
-        jogos.append({"id": f"g{grupo}_{id_jogo+1}", "grupo": grupo, "rodada": 1, "time_a": times[2], "time_b": times[3]})
-        # Rodada 2
-        jogos.append({"id": f"g{grupo}_{id_jogo+2}", "grupo": grupo, "rodada": 2, "time_a": times[0], "time_b": times[2]})
-        jogos.append({"id": f"g{grupo}_{id_jogo+3}", "grupo": grupo, "rodada": 2, "time_a": times[3], "time_b": times[1]})
-        # Rodada 3
-        jogos.append({"id": f"g{grupo}_{id_jogo+4}", "grupo": grupo, "rodada": 3, "time_a": times[3], "time_b": times[0]})
-        jogos.append({"id": f"g{grupo}_{id_jogo+5}", "grupo": grupo, "rodada": 3, "time_a": times[1], "time_b": times[2]})
-        id_jogo += 6
-    return jogos
+JOGOS = [
+    # Fase de Grupos (Exemplo Grupo A e B)
+    {"id": "jogo_1", "fase": "Grupos", "time_a": "México", "time_b": "África do Sul"},
+    {"id": "jogo_2", "fase": "Grupos", "time_a": "Brasil", "time_b": "Marrocos"},
+    # 16 Avos de Final (Exemplo de cruzamento)
+    {"id": "jogo_73", "fase": "16 Avos", "time_a": "1º Grupo A", "time_b": "3º Grupo C/D/E"},
+    # Oitavas de final, etc...
+    {"id": "jogo_89", "fase": "Oitavas", "time_a": "Vencedor Jogo 73", "time_b": "Vencedor Jogo 74"}
+]
 
-JOGOS = gerar_tabela()
+# --- CONTROLE DE SESSÃO (LOGIN) ---
+if "usuario_logado" not in st.session_state:
+    st.session_state.usuario_logado = None
+if "is_admin" not in st.session_state:
+    st.session_state.is_admin = False
 
-# --- GERENCIAMENTO DE ESTADO ---
-if "jogo_selecionado" not in st.session_state:
-    st.session_state.jogo_selecionado = None
-
-# --- SIDEBAR (MENU DE NAVEGAÇÃO) ---
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/2026_FIFA_World_Cup_logo.svg/800px-2026_FIFA_World_Cup_logo.svg.png", width=150)
-st.sidebar.title("Navegação")
-menu = st.sidebar.radio("Ir para:", ["Tabela de Jogos", "Painel do Admin (Resultados)"])
-
-# --- TELA 1: TABELA COMPLETA DA COPA ---
-if menu == "Tabela de Jogos":
-    st.title("📅 Tabela da Copa 2026")
-    st.write("Acompanhe todos os jogos da fase de grupos.")
+# --- TELA DE LOGIN ---
+def tela_login():
+    st.title("⚽ Bolão Copa do Mundo 2026")
+    st.write("Faça login para registrar seus palpites.")
     
-    # Criando 12 abas, uma para cada grupo
-    abas = st.tabs([f"Grupo {g}" for g in GRUPOS_2026.keys()])
-    
-    for i, (grupo, times) in enumerate(GRUPOS_2026.items()):
-        with abas[i]:
-            st.subheader(f"Seleções do Grupo {grupo}")
-            st.write(" • ".join([t.split(" (")[0] for t in times]))
-            st.divider()
-            
-            jogos_grupo = [j for j in JOGOS if j["grupo"] == grupo]
-            for rodada in [1, 2, 3]:
-                st.markdown(f"**{rodada}ª Rodada**")
-                jogos_rodada = [j for j in jogos_grupo if j["rodada"] == rodada]
-                
-                for jogo in jogos_rodada:
-                    # Card Visual do Jogo
-                    with st.container(border=True):
-                        c1, c2, c3 = st.columns([3, 1, 3])
-                        with c1:
-                            st.markdown(f"<div style='text-align: right; font-size: 18px;'>{jogo['time_a']}</div>", unsafe_allow_html=True)
-                        with c2:
-                            st.markdown("<div style='text-align: center; color: gray;'> X </div>", unsafe_allow_html=True)
-                        with c3:
-                            st.markdown(f"<div style='text-align: left; font-size: 18px;'>{jogo['time_b']}</div>", unsafe_allow_html=True)
-
-# --- TELA 2: PAINEL ADMINISTRATIVO (LANÇAR RESULTADOS E ARTILHEIROS) ---
-elif menu == "Painel do Admin (Resultados)":
-    
-    if st.session_state.jogo_selecionado is None:
-        st.title("⚙️ Lançamento de Resultados")
-        st.write("Selecione a partida para inserir o placar final e os autores dos gols.")
+    with st.container(border=True):
+        st.subheader("Acesso")
+        usuario = st.text_input("Nome de Usuário (Crie um ou digite o seu)").strip().lower()
+        senha = st.text_input("Senha", type="password")
         
-        # Filtro por Grupo para facilitar achar o jogo
-        grupo_filtro = st.selectbox("Filtrar por Grupo:", list(GRUPOS_2026.keys()))
-        jogos_filtrados = [j for j in JOGOS if j["grupo"] == grupo_filtro]
-        
-        for jogo in jogos_filtrados:
-            with st.container(border=True):
-                col_info, col_btn = st.columns([3, 1])
-                with col_info:
-                    st.markdown(f"**Rodada {jogo['rodada']}** | {jogo['time_a']} x {jogo['time_b']}")
-                with col_btn:
-                    if st.button("Lançar Placar", key=jogo['id'], use_container_width=True):
-                        st.session_state.jogo_selecionado = jogo
-                        st.rerun()
-                        
-    else:
-        # TELA DE INSERÇÃO DO JOGO ESPECÍFICO
-        jogo = st.session_state.jogo_selecionado
-        
-        if st.button("⬅ Voltar para a lista de jogos"):
-            st.session_state.jogo_selecionado = None
-            st.rerun()
-            
-        st.title("Registrar Placar Oficial")
-        st.caption(f"Grupo {jogo['grupo']} • Rodada {jogo['rodada']}")
-        
-        with st.container(border=True):
-            # 1. Linha do Placar
-            col_a, col_x, col_b = st.columns([2, 1, 2])
-            with col_a:
-                st.markdown(f"<div class='placar-box'>{jogo['time_a']}</div>", unsafe_allow_html=True)
-                gols_a = st.number_input(f"Gols marcados", min_value=0, step=1, key="ga")
-            with col_x:
-                st.markdown("<h1 style='text-align: center; margin-top: 30px;'>X</h1>", unsafe_allow_html=True)
-            with col_b:
-                st.markdown(f"<div class='placar-box'>{jogo['time_b']}</div>", unsafe_allow_html=True)
-                gols_b = st.number_input(f"Gols marcados", min_value=0, step=1, key="gb")
-
-        st.subheader("👟 Autores dos Gols")
-        
-        artilheiros_a = []
-        artilheiros_b = []
-
-        col_art_a, col_art_b = st.columns(2)
-        
-        with col_art_a:
-            if gols_a == 0:
-                st.info("Nenhum gol.")
-            for i in range(gols_a):
-                nome = st.text_input(f"Autor do {i+1}º gol ({jogo['time_a'].split(' ')[0]})", key=f"art_a_{i}")
-                if nome:
-                    artilheiros_a.append(nome)
-
-        with col_art_b:
-            if gols_b == 0:
-                st.info("Nenhum gol.")
-            for i in range(gols_b):
-                nome = st.text_input(f"Autor do {i+1}º gol ({jogo['time_b'].split(' ')[0]})", key=f"art_b_{i}")
-                if nome:
-                    artilheiros_b.append(nome)
-
-        st.divider()
-        
-        if st.button("💾 Salvar Resultado Definitivo", type="primary", use_container_width=True):
-            if len(artilheiros_a) != gols_a or len(artilheiros_b) != gols_b:
-                st.error("⚠️ Atenção: O número de artilheiros preenchidos deve ser igual ao número de gols.")
+        if st.button("Entrar", use_container_width=True):
+            if usuario == "admin" and senha == "admin123": # Troque a senha do admin depois!
+                st.session_state.usuario_logado = "Admin Master"
+                st.session_state.is_admin = True
+                st.rerun()
+            elif usuario and senha:
+                # Login simples para usuários (num app real, você validaria a senha no banco)
+                st.session_state.usuario_logado = usuario
+                st.session_state.is_admin = False
+                st.rerun()
             else:
-                dados_oficiais = {
-                    "id_partida": jogo['id'],
-                    "placar": {jogo['time_a']: gols_a, jogo['time_b']: gols_b},
-                    "artilheiros": {jogo['time_a']: artilheiros_a, jogo['time_b']: artilheiros_b}
-                }
-                
-                if db:
-                    db.collection("resultados_oficiais").document(jogo['id']).set(dados_oficiais)
-                    st.success("✅ Resultado salvo com sucesso no banco de dados!")
-                else:
-                    st.success("✅ Resultado registrado (Modo Local/Demonstração).")
-                    
-                # Limpar estado para voltar
-                st.session_state.jogo_selecionado = None
+                st.error("Preencha usuário e senha.")
+
+# --- MOTOR DE INTERFACE DE JOGO ---
+def renderizar_jogo(jogo, usuario, modo_admin=False):
+    st.markdown(f"**{jogo['time_a']} x {jogo['time_b']}**")
+    
+    # Define onde buscar/salvar os dados (Admin salva em resultados, Usuário em palpites)
+    colecao = "resultados_oficiais" if modo_admin else "palpites"
+    doc_id = f"{jogo['id']}" if modo_admin else f"{usuario}_{jogo['id']}"
+    
+    doc_ref = db.collection(colecao).document(doc_id) if db else None
+    dados_existentes = doc_ref.get().to_dict() if (doc_ref and doc_ref.get().exists) else None
+
+    # Se já tem palpite salvo e não for o admin sobrescrevendo
+    if dados_existentes and not modo_admin:
+        st.markdown(f"""
+        <div class="locked-box">
+            <b>🔒 Palpite Confirmado!</b><br>
+            Placar: {jogo['time_a']} {dados_existentes['placar_a']} x {dados_existentes['placar_b']} {jogo['time_b']}<br>
+            <i>Este palpite não pode mais ser alterado.</i>
+        </div>
+        """, unsafe_allow_html=True)
+        st.divider()
+        return
+
+    # Se não tem palpite, mostra o formulário
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 2])
+    with col2:
+        gols_a = st.number_input("", min_value=0, step=1, key=f"ga_{jogo['id']}_{modo_admin}", label_visibility="collapsed")
+    with col3:
+        gols_b = st.number_input("", min_value=0, step=1, key=f"gb_{jogo['id']}_{modo_admin}", label_visibility="collapsed")
+    
+    # Campo dinâmico para artilheiros
+    artilheiros_a = []
+    artilheiros_b = []
+    
+    if gols_a > 0 or gols_b > 0:
+        c_art_a, c_art_b = st.columns(2)
+        with c_art_a:
+            for i in range(gols_a):
+                artilheiros_a.append(st.text_input(f"Gol {i+1} ({jogo['time_a']})", key=f"arta_{jogo['id']}_{i}_{modo_admin}"))
+        with c_art_b:
+            for i in range(gols_b):
+                artilheiros_b.append(st.text_input(f"Gol {i+1} ({jogo['time_b']})", key=f"artb_{jogo['id']}_{i}_{modo_admin}"))
+
+    texto_botao = "💾 Salvar Resultado Oficial" if modo_admin else "✅ Confirmar Palpite (Irreversível)"
+    
+    if st.button(texto_botao, key=f"btn_{jogo['id']}_{modo_admin}"):
+        if (gols_a > 0 and "" in artilheiros_a) or (gols_b > 0 and "" in artilheiros_b):
+            st.error("Preencha o nome de todos os artilheiros!")
+        else:
+            dados = {
+                "placar_a": gols_a,
+                "placar_b": gols_b,
+                "artilheiros_a": artilheiros_a,
+                "artilheiros_b": artilheiros_b,
+                "usuario": usuario
+            }
+            if db:
+                doc_ref.set(dados)
+                st.success("Salvo com sucesso!")
+                st.rerun()
+            else:
+                st.warning("Modo demonstração: Conecte o Firebase para salvar.")
+    st.divider()
+
+# --- APLICATIVO PRINCIPAL ---
+if st.session_state.usuario_logado is None:
+    tela_login()
+else:
+    # Top bar
+    col_user, col_logout = st.columns([4, 1])
+    col_user.write(f"👤 Logado como: **{st.session_state.usuario_logado}**")
+    if col_logout.button("Sair"):
+        st.session_state.usuario_logado = None
+        st.session_state.is_admin = False
+        st.rerun()
+
+    st.title("🏆 Simulador Copa 2026")
+
+    # Separar visualização por abas baseada na fase do torneio
+    abas = st.tabs(FASES_COPA + (["⚙️ ADMIN"] if st.session_state.is_admin else []))
+
+    # Renderiza os jogos para os usuários normais dentro de cada aba
+    for i, fase in enumerate(FASES_COPA):
+        with abas[i]:
+            st.subheader(f"Partidas - {fase}")
+            jogos_da_fase = [j for j in JOGOS if j["fase"] == fase]
+            
+            for jogo in jogos_da_fase:
+                renderizar_jogo(jogo, st.session_state.usuario_logado, modo_admin=False)
+
+    # Renderiza a aba de Admin (Somente para admin)
+    if st.session_state.is_admin:
+        with abas[-1]:
+            st.subheader("Área Restrita - Lançar Resultados Oficiais")
+            st.info("O que for salvo aqui será a base para calcular a pontuação de todos os jogadores.")
+            
+            fase_selecionada = st.selectbox("Filtrar fase:", FASES_COPA)
+            jogos_admin = [j for j in JOGOS if j["fase"] == fase_selecionada]
+            
+            for jogo in jogos_admin:
+                renderizar_jogo(jogo, "admin", modo_admin=True)
