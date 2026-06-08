@@ -3,8 +3,26 @@ import json
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Admin Bolão 2026", page_icon="🏆", layout="centered")
+# --- CONFIGURAÇÃO DA PÁGINA (Deve ser a primeira linha) ---
+st.set_page_config(page_title="Bolão Copa 2026", page_icon="🏆", layout="centered")
+
+# --- CUSTOM CSS PARA MELHORAR A UX ---
+st.markdown("""
+    <style>
+    .stButton>button {
+        border-radius: 20px;
+        font-weight: bold;
+    }
+    .placar-box {
+        text-align: center;
+        font-size: 24px;
+        font-weight: bold;
+        background-color: #f0f2f6;
+        padding: 10px;
+        border-radius: 10px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- CONEXÃO COM FIREBASE ---
 @st.cache_resource
@@ -14,148 +32,170 @@ def init_firebase():
             firebase_creds = json.loads(st.secrets["firebase_credentials"])
             cred = credentials.Certificate(firebase_creds)
             firebase_admin.initialize_app(cred)
-        except Exception as e:
+        except Exception:
             return None
     return firestore.client()
 
 db = init_firebase()
 
-# --- DADOS DE EXEMPLO (JOGOS DA COPA) ---
-# Em um cenário real, você buscaria isso de uma API ou do próprio banco de dados
-JOGOS_2026 = [
-    {"id": "jogo_01", "data": "11 Junho", "fase": "Abertura", "local": "Estádio Azteca", "time_a": "MEX", "time_b": "POL", "hora": "15:00"},
-    {"id": "jogo_02", "data": "13 Junho", "fase": "Fase de Grupos", "local": "MetLife Stadium", "time_a": "BRA", "time_b": "MAR", "hora": "19:00"},
-    {"id": "jogo_03", "data": "13 Junho", "fase": "Fase de Grupos", "local": "Gillette Stadium", "time_a": "HAI", "time_b": "SCO", "hora": "22:00"},
-    {"id": "jogo_04", "data": "14 Junho", "fase": "Fase de Grupos", "local": "NRG Stadium", "time_a": "GER", "time_b": "CUW", "hora": "14:00"},
-]
+# --- DADOS REAIS DA COPA 2026 ---
+GRUPOS_2026 = {
+    "A": ["México (MEX)", "África do Sul (RSA)", "Coreia do Sul (KOR)", "República Tcheca (CZE)"],
+    "B": ["Canadá (CAN)", "Bósnia e Herze. (BIH)", "Catar (QAT)", "Suíça (SUI)"],
+    "C": ["Brasil (BRA)", "Marrocos (MAR)", "Haiti (HAI)", "Escócia (SCO)"],
+    "D": ["Estados Unidos (USA)", "Paraguai (PAR)", "Austrália (AUS)", "Turquia (TUR)"],
+    "E": ["Alemanha (GER)", "Curaçao (CUW)", "Costa do Marfim (CIV)", "Equador (ECU)"],
+    "F": ["Holanda (NED)", "Japão (JPN)", "Suécia (SWE)", "Tunísia (TUN)"],
+    "G": ["Bélgica (BEL)", "Egito (EGY)", "Irã (IRN)", "Nova Zelândia (NZL)"],
+    "H": ["Espanha (ESP)", "Cabo Verde (CPV)", "Arábia Saudita (KSA)", "Uruguai (URU)"],
+    "I": ["França (FRA)", "Senegal (SEN)", "Iraque (IRQ)", "Noruega (NOR)"],
+    "J": ["Argentina (ARG)", "Argélia (ALG)", "Áustria (AUT)", "Jordânia (JOR)"],
+    "K": ["Portugal (POR)", "RD Congo (COD)", "Uzbequistão (UZB)", "Colômbia (COL)"],
+    "L": ["Inglaterra (ENG)", "Croácia (CRO)", "Gana (GHA)", "Panamá (PAN)"]
+}
+
+# Gerador automático da tabela (Fase de Grupos)
+def gerar_tabela():
+    jogos = []
+    id_jogo = 1
+    for grupo, times in GRUPOS_2026.items():
+        # Rodada 1
+        jogos.append({"id": f"g{grupo}_{id_jogo}", "grupo": grupo, "rodada": 1, "time_a": times[0], "time_b": times[1]})
+        jogos.append({"id": f"g{grupo}_{id_jogo+1}", "grupo": grupo, "rodada": 1, "time_a": times[2], "time_b": times[3]})
+        # Rodada 2
+        jogos.append({"id": f"g{grupo}_{id_jogo+2}", "grupo": grupo, "rodada": 2, "time_a": times[0], "time_b": times[2]})
+        jogos.append({"id": f"g{grupo}_{id_jogo+3}", "grupo": grupo, "rodada": 2, "time_a": times[3], "time_b": times[1]})
+        # Rodada 3
+        jogos.append({"id": f"g{grupo}_{id_jogo+4}", "grupo": grupo, "rodada": 3, "time_a": times[3], "time_b": times[0]})
+        jogos.append({"id": f"g{grupo}_{id_jogo+5}", "grupo": grupo, "rodada": 3, "time_a": times[1], "time_b": times[2]})
+        id_jogo += 6
+    return jogos
+
+JOGOS = gerar_tabela()
 
 # --- GERENCIAMENTO DE ESTADO ---
-if "tela_atual" not in st.session_state:
-    st.session_state.tela_atual = "lista_jogos"
 if "jogo_selecionado" not in st.session_state:
     st.session_state.jogo_selecionado = None
 
-# --- FUNÇÕES DE NAVEGAÇÃO ---
-def ir_para_detalhe(jogo):
-    st.session_state.jogo_selecionado = jogo
-    st.session_state.tela_atual = "detalhe_jogo"
+# --- SIDEBAR (MENU DE NAVEGAÇÃO) ---
+st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/2026_FIFA_World_Cup_logo.svg/800px-2026_FIFA_World_Cup_logo.svg.png", width=150)
+st.sidebar.title("Navegação")
+menu = st.sidebar.radio("Ir para:", ["Tabela de Jogos", "Painel do Admin (Resultados)"])
 
-def voltar_para_lista():
-    st.session_state.jogo_selecionado = None
-    st.session_state.tela_atual = "lista_jogos"
-
-# --- TELA 1: LISTA DE JOGOS ---
-def mostrar_lista_jogos():
-    st.title("Lista de Partidas")
-    st.write("Selecione um jogo para lançar o placar e os artilheiros oficiais.")
+# --- TELA 1: TABELA COMPLETA DA COPA ---
+if menu == "Tabela de Jogos":
+    st.title("📅 Tabela da Copa 2026")
+    st.write("Acompanhe todos os jogos da fase de grupos.")
     
-    if db is None:
-        st.warning("⚠️ Firebase não conectado. O aplicativo funcionará de forma visual, mas não salvará os dados. Configure os Secrets no Streamlit Cloud.")
-
-    data_atual = ""
-    for jogo in JOGOS_2026:
-        # Agrupamento por data (visual)
-        if jogo["data"] != data_atual:
-            data_atual = jogo["data"]
-            st.markdown(f"#### 📅 {data_atual} • {jogo['fase']}")
+    # Criando 12 abas, uma para cada grupo
+    abas = st.tabs([f"Grupo {g}" for g in GRUPOS_2026.keys()])
+    
+    for i, (grupo, times) in enumerate(GRUPOS_2026.items()):
+        with abas[i]:
+            st.subheader(f"Seleções do Grupo {grupo}")
+            st.write(" • ".join([t.split(" (")[0] for t in times]))
             st.divider()
-        
-        # Card do Jogo
-        with st.container():
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col1:
-                st.caption(f"{jogo['hora']} | {jogo['local']}")
-            with col2:
-                st.markdown(f"<h4 style='text-align: center;'>{jogo['time_a']}  X  {jogo['time_b']}</h4>", unsafe_allow_html=True)
-            with col3:
-                # Botão que muda o estado da aplicação
-                st.button("Lançar Resultado", key=f"btn_{jogo['id']}", on_click=ir_para_detalhe, args=(jogo,), use_container_width=True)
-        st.write("") # Espaçamento
-
-# --- TELA 2: INSERÇÃO DE DADOS DO JOGO ---
-def mostrar_detalhe_jogo():
-    jogo = st.session_state.jogo_selecionado
-    
-    st.button("⬅ Voltar", on_click=voltar_para_lista)
-    
-    st.title("Inserção de Dados")
-    st.caption(f"{jogo['fase']} • {jogo['data']} • {jogo['local']}")
-    
-    # 1. Placar
-    st.subheader(f"Placar Final: {jogo['time_a']} vs {jogo['time_b']}")
-    col_a, col_x, col_b = st.columns([2, 1, 2])
-    
-    with col_a:
-        gols_a = st.number_input(f"Gols do(a) {jogo['time_a']}", min_value=0, step=1, value=0)
-    with col_x:
-        st.markdown("<h2 style='text-align: center; margin-top: 20px;'>X</h2>", unsafe_allow_html=True)
-    with col_b:
-        gols_b = st.number_input(f"Gols do(a) {jogo['time_b']}", min_value=0, step=1, value=0)
-
-    st.divider()
-
-    # 2. Artilheiros (Campos gerados dinamicamente com base no placar numérico)
-    st.subheader("Artilheiros da Partida")
-    
-    artilheiros_a = []
-    artilheiros_b = []
-
-    col_art_a, col_art_b = st.columns(2)
-    
-    with col_art_a:
-        st.markdown(f"**Gols do(a) {jogo['time_a']}: {gols_a}**")
-        if gols_a == 0:
-            st.info("Nenhum gol marcado.")
-        for i in range(gols_a):
-            nome = st.text_input(f"Autor do {i+1}º gol ({jogo['time_a']})", key=f"art_a_{i}")
-            if nome:
-                artilheiros_a.append(nome)
-
-    with col_art_b:
-        st.markdown(f"**Gols do(a) {jogo['time_b']}: {gols_b}**")
-        if gols_b == 0:
-            st.info("Nenhum gol marcado.")
-        for i in range(gols_b):
-            nome = st.text_input(f"Autor do {i+1}º gol ({jogo['time_b']})", key=f"art_b_{i}")
-            if nome:
-                artilheiros_b.append(nome)
-
-    st.divider()
-    
-    # 3. Botão de Salvar
-    if st.button("💾 Salvar Resultado no Banco de Dados", type="primary", use_container_width=True):
-        
-        # Validação básica
-        if len(artilheiros_a) != gols_a or len(artilheiros_b) != gols_b:
-            st.error("⚠️ Atenção: Preencha o nome de todos os artilheiros antes de salvar.")
-        else:
-            dados_partida = {
-                "id_partida": jogo['id'],
-                "placar": {
-                    jogo['time_a']: gols_a,
-                    jogo['time_b']: gols_b
-                },
-                "artilheiros": {
-                    jogo['time_a']: artilheiros_a,
-                    jogo['time_b']: artilheiros_b
-                },
-                "status": "encerrada"
-            }
             
-            # Salvar no Firebase
-            if db:
-                try:
-                    db.collection("partidas_encerradas").document(jogo['id']).set(dados_partida)
-                    st.success("✅ Resultado salvo com sucesso no Firebase! O ranking será atualizado.")
-                    # Poderia chamar a função de processar pontuações dos usuários aqui
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
-            else:
-                st.success("✅ Resultado registrado (Modo Demonstração).")
-                st.json(dados_partida)
+            jogos_grupo = [j for j in JOGOS if j["grupo"] == grupo]
+            for rodada in [1, 2, 3]:
+                st.markdown(f"**{rodada}ª Rodada**")
+                jogos_rodada = [j for j in jogos_grupo if j["rodada"] == rodada]
+                
+                for jogo in jogos_rodada:
+                    # Card Visual do Jogo
+                    with st.container(border=True):
+                        c1, c2, c3 = st.columns([3, 1, 3])
+                        with c1:
+                            st.markdown(f"<div style='text-align: right; font-size: 18px;'>{jogo['time_a']}</div>", unsafe_allow_html=True)
+                        with c2:
+                            st.markdown("<div style='text-align: center; color: gray;'> X </div>", unsafe_allow_html=True)
+                        with c3:
+                            st.markdown(f"<div style='text-align: left; font-size: 18px;'>{jogo['time_b']}</div>", unsafe_allow_html=True)
 
-# --- ROTEAMENTO (ROUTER) ---
-if st.session_state.tela_atual == "lista_jogos":
-    mostrar_lista_jogos()
-elif st.session_state.tela_atual == "detalhe_jogo":
-    mostrar_detalhe_jogo()
+# --- TELA 2: PAINEL ADMINISTRATIVO (LANÇAR RESULTADOS E ARTILHEIROS) ---
+elif menu == "Painel do Admin (Resultados)":
+    
+    if st.session_state.jogo_selecionado is None:
+        st.title("⚙️ Lançamento de Resultados")
+        st.write("Selecione a partida para inserir o placar final e os autores dos gols.")
+        
+        # Filtro por Grupo para facilitar achar o jogo
+        grupo_filtro = st.selectbox("Filtrar por Grupo:", list(GRUPOS_2026.keys()))
+        jogos_filtrados = [j for j in JOGOS if j["grupo"] == grupo_filtro]
+        
+        for jogo in jogos_filtrados:
+            with st.container(border=True):
+                col_info, col_btn = st.columns([3, 1])
+                with col_info:
+                    st.markdown(f"**Rodada {jogo['rodada']}** | {jogo['time_a']} x {jogo['time_b']}")
+                with col_btn:
+                    if st.button("Lançar Placar", key=jogo['id'], use_container_width=True):
+                        st.session_state.jogo_selecionado = jogo
+                        st.rerun()
+                        
+    else:
+        # TELA DE INSERÇÃO DO JOGO ESPECÍFICO
+        jogo = st.session_state.jogo_selecionado
+        
+        if st.button("⬅ Voltar para a lista de jogos"):
+            st.session_state.jogo_selecionado = None
+            st.rerun()
+            
+        st.title("Registrar Placar Oficial")
+        st.caption(f"Grupo {jogo['grupo']} • Rodada {jogo['rodada']}")
+        
+        with st.container(border=True):
+            # 1. Linha do Placar
+            col_a, col_x, col_b = st.columns([2, 1, 2])
+            with col_a:
+                st.markdown(f"<div class='placar-box'>{jogo['time_a']}</div>", unsafe_allow_html=True)
+                gols_a = st.number_input(f"Gols marcados", min_value=0, step=1, key="ga")
+            with col_x:
+                st.markdown("<h1 style='text-align: center; margin-top: 30px;'>X</h1>", unsafe_allow_html=True)
+            with col_b:
+                st.markdown(f"<div class='placar-box'>{jogo['time_b']}</div>", unsafe_allow_html=True)
+                gols_b = st.number_input(f"Gols marcados", min_value=0, step=1, key="gb")
+
+        st.subheader("👟 Autores dos Gols")
+        
+        artilheiros_a = []
+        artilheiros_b = []
+
+        col_art_a, col_art_b = st.columns(2)
+        
+        with col_art_a:
+            if gols_a == 0:
+                st.info("Nenhum gol.")
+            for i in range(gols_a):
+                nome = st.text_input(f"Autor do {i+1}º gol ({jogo['time_a'].split(' ')[0]})", key=f"art_a_{i}")
+                if nome:
+                    artilheiros_a.append(nome)
+
+        with col_art_b:
+            if gols_b == 0:
+                st.info("Nenhum gol.")
+            for i in range(gols_b):
+                nome = st.text_input(f"Autor do {i+1}º gol ({jogo['time_b'].split(' ')[0]})", key=f"art_b_{i}")
+                if nome:
+                    artilheiros_b.append(nome)
+
+        st.divider()
+        
+        if st.button("💾 Salvar Resultado Definitivo", type="primary", use_container_width=True):
+            if len(artilheiros_a) != gols_a or len(artilheiros_b) != gols_b:
+                st.error("⚠️ Atenção: O número de artilheiros preenchidos deve ser igual ao número de gols.")
+            else:
+                dados_oficiais = {
+                    "id_partida": jogo['id'],
+                    "placar": {jogo['time_a']: gols_a, jogo['time_b']: gols_b},
+                    "artilheiros": {jogo['time_a']: artilheiros_a, jogo['time_b']: artilheiros_b}
+                }
+                
+                if db:
+                    db.collection("resultados_oficiais").document(jogo['id']).set(dados_oficiais)
+                    st.success("✅ Resultado salvo com sucesso no banco de dados!")
+                else:
+                    st.success("✅ Resultado registrado (Modo Local/Demonstração).")
+                    
+                # Limpar estado para voltar
+                st.session_state.jogo_selecionado = None
