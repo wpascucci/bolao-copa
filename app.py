@@ -370,45 +370,42 @@ else:
         aba_showdown = abas[-2]
         aba_ranking = abas[-1]
 
-        # --- ABA PALPITES DA GALERA ---
+# --- ABA PALPITES DA GALERA ---
         with aba_showdown:
             st.header("Mesa de Palpites")
-            st.write("Visível somente após todos palpitarem ou se o tempo esgotar (10 min antes).")
+            st.write("Visível estritamente após o período de apostas fechar (menos de 10 min para o início).")
             
             if JOGOS_ATUAIS:
-                jogo_selecionado_str = st.selectbox("Selecione a partida:", [f"{j['id']} - {j['time_a']} x {j['time_b']}" for j in JOGOS_ATUAIS])
+                jogo_selecionado_str = st.selectbox("Partida:", [f"{j['id']} - {j['time_a']} x {j['time_b']}" for j in JOGOS_ATUAIS])
                 jogo_id_sel = jogo_selecionado_str.split(" - ")[0]
                 jogo_sel = next(j for j in JOGOS_ATUAIS if j["id"] == jogo_id_sel)
                 
                 if db:
-                    total_usuarios = len(list(db.collection("usuarios").where("email", "!=", "admin").stream()))
                     palpites_jogo = list(db.collection("palpites").where("id_jogo", "==", jogo_id_sel).stream())
                     
                     data_hora_str = jogo_sel.get('data_hora', '2026-12-31 23:59')
                     hora_jogo = datetime.strptime(data_hora_str, "%Y-%m-%d %H:%M")
-                    limite_esgotado = datetime.now() > (hora_jogo - timedelta(minutes=10))
-                    todos_palpitaram = len(palpites_jogo) >= total_usuarios and total_usuarios > 0
+                    limite_aposta = hora_jogo - timedelta(minutes=10)
+                    limite_esgotado = datetime.now() > limite_aposta
                     
-                    if todos_palpitaram or limite_esgotado:
-                        st.success("Mesa Aberta! Confira os palpites:")
+                    if limite_esgotado:
+                        st.success("Mesa Aberta! O tempo de apostas esgotou. Confira os palpites da galera:")
                         dados_tabela = []
                         for doc in palpites_jogo:
                             p = doc.to_dict()
                             artilheiros = ", ".join(p.get('artilheiros_a', []) + p.get('artilheiros_b', []))
                             dados_tabela.append({
-                                # Correção exata do KeyError com o .get()
                                 "Jogador": p.get('nome_completo', 'Desconhecido'),
                                 "Placar": f"{jogo_sel['time_a']} {p.get('placar_a',0)} x {p.get('placar_b',0)} {jogo_sel['time_b']}",
                                 "Goleadores": artilheiros if artilheiros else "Nenhum"
                             })
-                        if dados_tabela:
+                        if dados_tabela: 
                             st.dataframe(pd.DataFrame(dados_tabela), use_container_width=True)
-                        else:
+                        else: 
                             st.info("Ninguém registrou palpites para este jogo.")
                     else:
-                        faltam = total_usuarios - len(palpites_jogo)
-                        st.warning(f"🔒 Bloqueado! Ainda faltam {faltam} jogadores. Aguarde todos finalizarem ou o relógio esgotar.")
-
+                        st.warning(f"🔒 Mesa Bloqueada! Os palpites só serão revelados quando o tempo de aposta esgotar ({limite_aposta.strftime('%d/%m às %H:%M')}).")
+        
         with aba_ranking:
             st.header("Classificação Geral")
             if st.button("🔄 Atualizar Ranking") and db:
