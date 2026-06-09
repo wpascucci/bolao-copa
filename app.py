@@ -415,25 +415,39 @@ else:
         aba_ranking = abas[2]
         
     else:
-        # Puxa a classificação atualizada apenas uma vez
         tabela_oficial = calcular_tabela_grupos()
+        
+        # --- NOVIDADE: Busca todos os palpites do usuário de uma vez só ---
+        palpites_feitos = []
+        if db:
+            docs_user = db.collection("palpites").where("email", "==", st.session_state.usuario_logado).stream()
+            palpites_feitos = [doc.to_dict().get('id_jogo') for doc in docs_user]
         
         for i, fase in enumerate(FASES_COPA):
             with abas[i]:
                 if fase == "Grupos":
                     for grupo in sorted(GRUPOS_2026.keys()):
-                        # Transformamos o título em um Expander (Acordion)
-                        with st.expander(f"🏆 GRUPO {grupo}", expanded=False):
+                        
+                        # --- LÓGICA DE CORES E STATUS ---
+                        jogos_do_grupo = [j for j in JOGOS_ATUAIS if j.get("grupo") == grupo]
+                        jogos_palpitados = [j['id'] for j in jogos_do_grupo if j['id'] in palpites_feitos]
+                        
+                        # Verifica se palpitou em todos os jogos daquele grupo (geralmente 6)
+                        if len(jogos_do_grupo) > 0 and len(jogos_palpitados) == len(jogos_do_grupo):
+                            titulo_expander = f"🟢 GRUPO {grupo} (Completo)"
+                        else:
+                            titulo_expander = f"🟡 GRUPO {grupo} (Pendente: {len(jogos_palpitados)}/{len(jogos_do_grupo)} palpites)"
+
+                        # Aplica o título dinâmico no Acordion
+                        with st.expander(titulo_expander, expanded=False):
                             col_tab, col_jogos = st.columns([1.5, 1])
 
                             with col_tab:
-                                # Monta a tabela de classificação na esquerda
                                 df_grupo = pd.DataFrame.from_dict(tabela_oficial[grupo], orient='index')
                                 df_grupo = df_grupo.sort_values(by=["P", "SG", "GP"], ascending=[False, False, False])
                                 st.dataframe(df_grupo, use_container_width=True)
 
                             with col_jogos:
-                                # Monta os jogos em abas (1ª, 2ª e 3ª Rodadas) na direita
                                 jogos_grupo = [j for j in JOGOS_ATUAIS if j.get("grupo") == grupo]
                                 jogos_grupo.sort(key=lambda x: x.get('data_hora', ''))
 
@@ -444,10 +458,8 @@ else:
                                         for j in jogos_rodada:
                                             renderizar_jogo_inline(j, st.session_state.usuario_logado, st.session_state.nome_usuario, False)
                 else:
-                    # Para as fases de Mata-Mata, mantém a listagem em bloco único
                     jogos_fase = [j for j in JOGOS_ATUAIS if j["fase"] == fase]
-                    if not jogos_fase:
-                        st.info("Confrontos ainda não definidos pelo Administrador.")
+                    if not jogos_fase: st.info("Confrontos ainda não definidos pelo Administrador.")
                     for j in jogos_fase:
                         with st.expander(f"⚽ {j['time_a']} x {j['time_b']} 🕒 {j.get('data_hora', 'N/D')}"):
                             renderizar_jogo(j, st.session_state.usuario_logado, st.session_state.nome_usuario, False)
