@@ -422,27 +422,27 @@ else:
             with abas[i]:
                 if fase == "Grupos":
                     for grupo in sorted(GRUPOS_2026.keys()):
-                        st.markdown(f"<h3 style='color: #003a70; padding-top: 15px;'>GRUPO {grupo}</h3>", unsafe_allow_html=True)
-                        col_tab, col_jogos = st.columns([1.5, 1])
+                        # Transformamos o título em um Expander (Acordion)
+                        with st.expander(f"🏆 GRUPO {grupo}", expanded=False):
+                            col_tab, col_jogos = st.columns([1.5, 1])
 
-                        with col_tab:
-                            # Monta a tabela de classificação na esquerda
-                            df_grupo = pd.DataFrame.from_dict(tabela_oficial[grupo], orient='index')
-                            df_grupo = df_grupo.sort_values(by=["P", "SG", "GP"], ascending=[False, False, False])
-                            st.dataframe(df_grupo, use_container_width=True)
+                            with col_tab:
+                                # Monta a tabela de classificação na esquerda
+                                df_grupo = pd.DataFrame.from_dict(tabela_oficial[grupo], orient='index')
+                                df_grupo = df_grupo.sort_values(by=["P", "SG", "GP"], ascending=[False, False, False])
+                                st.dataframe(df_grupo, use_container_width=True)
 
-                        with col_jogos:
-                            # Monta os jogos em abas (1ª, 2ª e 3ª Rodadas) na direita
-                            jogos_grupo = [j for j in JOGOS_ATUAIS if j.get("grupo") == grupo]
-                            jogos_grupo.sort(key=lambda x: x.get('data_hora', ''))
+                            with col_jogos:
+                                # Monta os jogos em abas (1ª, 2ª e 3ª Rodadas) na direita
+                                jogos_grupo = [j for j in JOGOS_ATUAIS if j.get("grupo") == grupo]
+                                jogos_grupo.sort(key=lambda x: x.get('data_hora', ''))
 
-                            abas_rodadas = st.tabs(["1ª Rodada", "2ª Rodada", "3ª Rodada"])
-                            for r_idx in range(3):
-                                with abas_rodadas[r_idx]:
-                                    jogos_rodada = jogos_grupo[r_idx*2 : (r_idx+1)*2]
-                                    for j in jogos_rodada:
-                                        renderizar_jogo_inline(j, st.session_state.usuario_logado, st.session_state.nome_usuario, False)
-                        st.divider()
+                                abas_rodadas = st.tabs(["1ª Rodada", "2ª Rodada", "3ª Rodada"])
+                                for r_idx in range(3):
+                                    with abas_rodadas[r_idx]:
+                                        jogos_rodada = jogos_grupo[r_idx*2 : (r_idx+1)*2]
+                                        for j in jogos_rodada:
+                                            renderizar_jogo_inline(j, st.session_state.usuario_logado, st.session_state.nome_usuario, False)
                 else:
                     # Para as fases de Mata-Mata, mantém a listagem em bloco único
                     jogos_fase = [j for j in JOGOS_ATUAIS if j["fase"] == fase]
