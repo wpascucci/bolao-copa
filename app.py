@@ -414,7 +414,7 @@ else:
                     
         aba_ranking = abas[2]
         
-else:
+    else:
         # Puxa a classificação atualizada apenas uma vez
         tabela_oficial = calcular_tabela_grupos()
         
