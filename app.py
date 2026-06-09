@@ -313,7 +313,62 @@ def renderizar_jogo(jogo, email_usuario, nome_exibicao, modo_admin=False):
         elif db:
             col_ref.document(doc_id).set({"placar_a": ga, "placar_b": gb, "artilheiros_a": art_a, "artilheiros_b": art_b, "email": email_usuario, "nome_completo": nome_exibicao, "id_jogo": jogo['id']})
             st.success("Salvo com sucesso!"); st.rerun()
-            
+
+def renderizar_jogo_inline(jogo, email_usuario, nome_exibicao, modo_admin=False):
+    data_hora_str = jogo.get('data_hora', '2026-12-31 23:59')
+    hora_jogo = datetime.strptime(data_hora_str, "%Y-%m-%d %H:%M")
+    tempo_atual = datetime.now()
+    limite_aposta = hora_jogo - timedelta(minutes=10)
+    jogo_bloqueado = tempo_atual > limite_aposta and not modo_admin
+    
+    doc_id = f"{jogo['id']}" if modo_admin else f"{email_usuario}_{jogo['id']}"
+    col_ref = db.collection("resultados_oficiais" if modo_admin else "palpites") if db else None
+    dados_existentes = col_ref.document(doc_id).get().to_dict() if col_ref and col_ref.document(doc_id).get().exists else None
+
+    # Cabeçalho do jogo (Data/Hora)
+    st.caption(f"🕒 {hora_jogo.strftime('%d/%m/%Y %H:%M')}")
+
+    if jogo_bloqueado:
+        if dados_existentes:
+            st.markdown(f"<div style='text-align:center; padding: 5px; background: #f0f2f6; border-radius: 5px; border-left: 3px solid #1a73e8;'><b>{jogo['time_a']} {dados_existentes.get('placar_a',0)} x {dados_existentes.get('placar_b',0)} {jogo['time_b']}</b><br><small>🔒 Tempo Esgotado</small></div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div style='text-align:center; color:gray;'><small>🔒 Tempo Esgotado (0 pts)</small></div>", unsafe_allow_html=True)
+        st.write("---")
+        return
+
+    valor_ga = dados_existentes.get('placar_a', 0) if dados_existentes else 0
+    valor_gb = dados_existentes.get('placar_b', 0) if dados_existentes else 0
+
+    # Layout lado a lado (Estilo Imagem)
+    c1, c2, c3, c4, c5 = st.columns([3, 2, 1, 2, 3])
+    c1.markdown(f"<div style='text-align: right; margin-top: 5px;'><b>{jogo['time_a']}</b></div>", unsafe_allow_html=True)
+    ga = c2.number_input("", min_value=0, step=1, value=valor_ga, key=f"ga_{jogo['id']}_{modo_admin}", label_visibility="collapsed")
+    c3.markdown("<div style='text-align: center; margin-top: 5px;'><b>X</b></div>", unsafe_allow_html=True)
+    gb = c4.number_input("", min_value=0, step=1, value=valor_gb, key=f"gb_{jogo['id']}_{modo_admin}", label_visibility="collapsed")
+    c5.markdown(f"<div style='text-align: left; margin-top: 5px;'><b>{jogo['time_b']}</b></div>", unsafe_allow_html=True)
+
+    art_a, art_b = [], []
+    existentes_a = dados_existentes.get('artilheiros_a', []) if dados_existentes else []
+    existentes_b = dados_existentes.get('artilheiros_b', []) if dados_existentes else []
+
+    if ga > 0 or gb > 0:
+        ca, cb = st.columns(2)
+        with ca:
+            for i in range(ga):
+                val = existentes_a[i] if i < len(existentes_a) else ""
+                art_a.append(st.text_input(f"⚽", value=val, key=f"aa_{jogo['id']}_{i}_{modo_admin}", placeholder=f"Gol {jogo['time_a']}"))
+        with cb:
+            for i in range(gb):
+                val = existentes_b[i] if i < len(existentes_b) else ""
+                art_b.append(st.text_input(f"⚽", value=val, key=f"ab_{jogo['id']}_{i}_{modo_admin}", placeholder=f"Gol {jogo['time_b']}"))
+
+    if st.button("Salvar" if not dados_existentes else "Atualizar", key=f"btn_{jogo['id']}_{modo_admin}", use_container_width=True):
+        if (ga > 0 and "" in art_a) or (gb > 0 and "" in art_b): st.error("Preencha artilheiros!")
+        elif db:
+            col_ref.document(doc_id).set({"placar_a": ga, "placar_b": gb, "artilheiros_a": art_a, "artilheiros_b": art_b, "email": email_usuario, "nome_completo": nome_exibicao, "id_jogo": jogo['id']})
+            st.success("Salvo!"); st.rerun()
+    st.write("---")
+
 # --- APLICATIVO PRINCIPAL ---
 if st.session_state.usuario_logado is None:
     tela_autenticacao()
