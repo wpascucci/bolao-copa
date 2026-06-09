@@ -52,25 +52,96 @@ def inicializar_jogos_no_banco():
     if not db: return
     ref_jogos = db.collection("tabela_jogos")
     
-    # Se a tabela estiver vazia, gera os 72 jogos iniciais
+    # Se estiver vazio, cria a tabela oficial enviada com os horários de Brasília
     if len(list(ref_jogos.limit(1).stream())) == 0:
-        id_jogo = 1
-        data_base = datetime(2026, 6, 11, 15, 0) # Data de abertura da copa
+        batch = db.batch()
         
-        for grupo, times in GRUPOS_2026.items():
-            confrontos = [(0,1), (2,3), (0,2), (3,1), (3,0), (1,2)]
-            for rodada, (i, j) in enumerate(confrontos):
-                # Distribui os horários matematicamente para não ficarem todos iguais
-                hora_jogo = data_base + timedelta(days=(id_jogo//4), hours=(id_jogo%4)*4)
-                
-                jogo = {
-                    "id": f"jogo_{id_jogo}", "fase": "Grupos", "grupo": grupo,
-                    "rodada": (rodada // 2) + 1, "time_a": times[i], "time_b": times[j],
-                    "data_hora": hora_jogo.strftime("%Y-%m-%d %H:%M")
-                }
-                ref_jogos.document(jogo["id"]).set(jogo)
-                id_jogo += 1
-
+        JOGOS_BASE = [
+            # 1ª Rodada
+            {"id": "jogo_1", "fase": "Grupos", "grupo": "A", "time_a": "México", "time_b": "África do Sul", "data_hora": "2026-06-11 16:00"},
+            {"id": "jogo_2", "fase": "Grupos", "grupo": "A", "time_a": "República da Coreia", "time_b": "República Tcheca", "data_hora": "2026-06-11 23:00"},
+            {"id": "jogo_3", "fase": "Grupos", "grupo": "B", "time_a": "Canadá", "time_b": "Bósnia e Herzegovina", "data_hora": "2026-06-12 16:00"},
+            {"id": "jogo_4", "fase": "Grupos", "grupo": "D", "time_a": "Estados Unidos", "time_b": "Paraguai", "data_hora": "2026-06-12 22:00"},
+            {"id": "jogo_5", "fase": "Grupos", "grupo": "B", "time_a": "Catar", "time_b": "Suíça", "data_hora": "2026-06-13 16:00"},
+            {"id": "jogo_6", "fase": "Grupos", "grupo": "C", "time_a": "Brasil", "time_b": "Marrocos", "data_hora": "2026-06-13 19:00"},
+            {"id": "jogo_7", "fase": "Grupos", "grupo": "C", "time_a": "Haiti", "time_b": "Escócia", "data_hora": "2026-06-13 22:00"},
+            {"id": "jogo_8", "fase": "Grupos", "grupo": "D", "time_a": "Austrália", "time_b": "Turquia", "data_hora": "2026-06-14 01:00"},
+            {"id": "jogo_9", "fase": "Grupos", "grupo": "E", "time_a": "Alemanha", "time_b": "Curaçau", "data_hora": "2026-06-14 14:00"},
+            {"id": "jogo_10", "fase": "Grupos", "grupo": "E", "time_a": "Costa do Marfim", "time_b": "Equador", "data_hora": "2026-06-14 20:00"},
+            {"id": "jogo_11", "fase": "Grupos", "grupo": "F", "time_a": "Holanda", "time_b": "Japão", "data_hora": "2026-06-14 17:00"},
+            {"id": "jogo_12", "fase": "Grupos", "grupo": "F", "time_a": "Suécia", "time_b": "Tunísia", "data_hora": "2026-06-14 23:00"},
+            {"id": "jogo_13", "fase": "Grupos", "grupo": "H", "time_a": "Espanha", "time_b": "Cabo Verde", "data_hora": "2026-06-15 13:00"},
+            {"id": "jogo_14", "fase": "Grupos", "grupo": "H", "time_a": "Arábia Saudita", "time_b": "Uruguai", "data_hora": "2026-06-15 19:00"},
+            {"id": "jogo_15", "fase": "Grupos", "grupo": "G", "time_a": "Bélgica", "time_b": "Egito", "data_hora": "2026-06-15 16:00"},
+            {"id": "jogo_16", "fase": "Grupos", "grupo": "G", "time_a": "Irã", "time_b": "Nova Zelândia", "data_hora": "2026-06-15 22:00"},
+            {"id": "jogo_17", "fase": "Grupos", "grupo": "I", "time_a": "França", "time_b": "Senegal", "data_hora": "2026-06-16 16:00"},
+            {"id": "jogo_18", "fase": "Grupos", "grupo": "I", "time_a": "Iraque", "time_b": "Noruega", "data_hora": "2026-06-16 19:00"},
+            {"id": "jogo_19", "fase": "Grupos", "grupo": "J", "time_a": "Argentina", "time_b": "Argélia", "data_hora": "2026-06-16 22:00"},
+            {"id": "jogo_20", "fase": "Grupos", "grupo": "J", "time_a": "Áustria", "time_b": "Jordânia", "data_hora": "2026-06-17 01:00"},
+            {"id": "jogo_21", "fase": "Grupos", "grupo": "K", "time_a": "Portugal", "time_b": "República Democrática do Congo", "data_hora": "2026-06-17 14:00"},
+            {"id": "jogo_22", "fase": "Grupos", "grupo": "L", "time_a": "Inglaterra", "time_b": "Croácia", "data_hora": "2026-06-17 17:00"},
+            {"id": "jogo_23", "fase": "Grupos", "grupo": "L", "time_a": "Gana", "time_b": "Panamá", "data_hora": "2026-06-17 20:00"},
+            {"id": "jogo_24", "fase": "Grupos", "grupo": "K", "time_a": "Uzbequistão", "time_b": "Colômbia", "data_hora": "2026-06-17 21:00"},
+            
+            # 2ª Rodada
+            {"id": "jogo_25", "fase": "Grupos", "grupo": "A", "time_a": "República Tcheca", "time_b": "África do Sul", "data_hora": "2026-06-18 13:00"},
+            {"id": "jogo_26", "fase": "Grupos", "grupo": "B", "time_a": "Suíça", "time_b": "Bósnia e Herzegovina", "data_hora": "2026-06-18 16:00"},
+            {"id": "jogo_27", "fase": "Grupos", "grupo": "B", "time_a": "Canadá", "time_b": "Catar", "data_hora": "2026-06-18 19:00"},
+            {"id": "jogo_28", "fase": "Grupos", "grupo": "A", "time_a": "México", "time_b": "República da Coreia", "data_hora": "2026-06-18 22:00"},
+            {"id": "jogo_29", "fase": "Grupos", "grupo": "D", "time_a": "Turquia", "time_b": "Paraguai", "data_hora": "2026-06-19 00:00"},
+            {"id": "jogo_30", "fase": "Grupos", "grupo": "D", "time_a": "Estados Unidos", "time_b": "Austrália", "data_hora": "2026-06-19 16:00"},
+            {"id": "jogo_31", "fase": "Grupos", "grupo": "C", "time_a": "Escócia", "time_b": "Marrocos", "data_hora": "2026-06-19 19:00"},
+            {"id": "jogo_32", "fase": "Grupos", "grupo": "C", "time_a": "Brasil", "time_b": "Haiti", "data_hora": "2026-06-19 21:30"},
+            {"id": "jogo_33", "fase": "Grupos", "grupo": "F", "time_a": "Holanda", "time_b": "Suécia", "data_hora": "2026-06-20 14:00"},
+            {"id": "jogo_34", "fase": "Grupos", "grupo": "E", "time_a": "Alemanha", "time_b": "Costa do Marfim", "data_hora": "2026-06-20 17:00"},
+            {"id": "jogo_35", "fase": "Grupos", "grupo": "E", "time_a": "Equador", "time_b": "Curaçau", "data_hora": "2026-06-20 21:00"},
+            {"id": "jogo_36", "fase": "Grupos", "grupo": "F", "time_a": "Tunísia", "time_b": "Japão", "data_hora": "2026-06-20 23:00"},
+            {"id": "jogo_37", "fase": "Grupos", "grupo": "H", "time_a": "Espanha", "time_b": "Arábia Saudita", "data_hora": "2026-06-21 13:00"},
+            {"id": "jogo_38", "fase": "Grupos", "grupo": "G", "time_a": "Bélgica", "time_b": "Irã", "data_hora": "2026-06-21 16:00"},
+            {"id": "jogo_39", "fase": "Grupos", "grupo": "H", "time_a": "Uruguai", "time_b": "Cabo Verde", "data_hora": "2026-06-21 19:00"},
+            {"id": "jogo_40", "fase": "Grupos", "grupo": "G", "time_a": "Nova Zelândia", "time_b": "Egito", "data_hora": "2026-06-21 22:00"},
+            {"id": "jogo_41", "fase": "Grupos", "grupo": "J", "time_a": "Argentina", "time_b": "Áustria", "data_hora": "2026-06-22 14:00"},
+            {"id": "jogo_42", "fase": "Grupos", "grupo": "I", "time_a": "França", "time_b": "Iraque", "data_hora": "2026-06-22 18:00"},
+            {"id": "jogo_43", "fase": "Grupos", "grupo": "I", "time_a": "Noruega", "time_b": "Senegal", "data_hora": "2026-06-22 21:00"},
+            {"id": "jogo_44", "fase": "Grupos", "grupo": "J", "time_a": "Jordânia", "time_b": "Argélia", "data_hora": "2026-06-23 00:00"},
+            {"id": "jogo_45", "fase": "Grupos", "grupo": "K", "time_a": "Portugal", "time_b": "Uzbequistão", "data_hora": "2026-06-23 14:00"},
+            {"id": "jogo_46", "fase": "Grupos", "grupo": "L", "time_a": "Inglaterra", "time_b": "Gana", "data_hora": "2026-06-23 17:00"},
+            {"id": "jogo_47", "fase": "Grupos", "grupo": "L", "time_a": "Panamá", "time_b": "Croácia", "data_hora": "2026-06-23 20:00"},
+            {"id": "jogo_48", "fase": "Grupos", "grupo": "K", "time_a": "Colômbia", "time_b": "República Democrática do Congo", "data_hora": "2026-06-23 23:00"},
+            
+            # 3ª Rodada
+            {"id": "jogo_49", "fase": "Grupos", "grupo": "B", "time_a": "Suíça", "time_b": "Canadá", "data_hora": "2026-06-24 16:00"},
+            {"id": "jogo_50", "fase": "Grupos", "grupo": "B", "time_a": "Bósnia e Herzegovina", "time_b": "Catar", "data_hora": "2026-06-24 16:00"},
+            {"id": "jogo_51", "fase": "Grupos", "grupo": "C", "time_a": "Escócia", "time_b": "Brasil", "data_hora": "2026-06-24 19:00"},
+            {"id": "jogo_52", "fase": "Grupos", "grupo": "C", "time_a": "Marrocos", "time_b": "Haiti", "data_hora": "2026-06-24 19:00"},
+            {"id": "jogo_53", "fase": "Grupos", "grupo": "A", "time_a": "República Tcheca", "time_b": "México", "data_hora": "2026-06-24 22:00"},
+            {"id": "jogo_54", "fase": "Grupos", "grupo": "A", "time_a": "África do Sul", "time_b": "República da Coreia", "data_hora": "2026-06-24 22:00"},
+            {"id": "jogo_55", "fase": "Grupos", "grupo": "E", "time_a": "Equador", "time_b": "Alemanha", "data_hora": "2026-06-25 17:00"},
+            {"id": "jogo_56", "fase": "Grupos", "grupo": "E", "time_a": "Curaçau", "time_b": "Costa do Marfim", "data_hora": "2026-06-25 17:00"},
+            {"id": "jogo_57", "fase": "Grupos", "grupo": "F", "time_a": "Tunísia", "time_b": "Holanda", "data_hora": "2026-06-25 20:00"},
+            {"id": "jogo_58", "fase": "Grupos", "grupo": "F", "time_a": "Japão", "time_b": "Suécia", "data_hora": "2026-06-25 20:00"},
+            {"id": "jogo_59", "fase": "Grupos", "grupo": "D", "time_a": "Turquia", "time_b": "Estados Unidos", "data_hora": "2026-06-25 23:00"},
+            {"id": "jogo_60", "fase": "Grupos", "grupo": "D", "time_a": "Paraguai", "time_b": "Austrália", "data_hora": "2026-06-25 23:00"},
+            {"id": "jogo_61", "fase": "Grupos", "grupo": "I", "time_a": "Noruega", "time_b": "França", "data_hora": "2026-06-26 16:00"},
+            {"id": "jogo_62", "fase": "Grupos", "grupo": "I", "time_a": "Senegal", "time_b": "Iraque", "data_hora": "2026-06-26 16:00"},
+            {"id": "jogo_63", "fase": "Grupos", "grupo": "H", "time_a": "Uruguai", "time_b": "Espanha", "data_hora": "2026-06-26 21:00"},
+            {"id": "jogo_64", "fase": "Grupos", "grupo": "H", "time_a": "Cabo Verde", "time_b": "Arábia Saudita", "data_hora": "2026-06-26 21:00"},
+            {"id": "jogo_65", "fase": "Grupos", "grupo": "G", "time_a": "Egito", "time_b": "Irã", "data_hora": "2026-06-27 00:00"},
+            {"id": "jogo_66", "fase": "Grupos", "grupo": "G", "time_a": "Nova Zelândia", "time_b": "Bélgica", "data_hora": "2026-06-27 00:00"},
+            {"id": "jogo_67", "fase": "Grupos", "grupo": "L", "time_a": "Panamá", "time_b": "Inglaterra", "data_hora": "2026-06-27 18:00"},
+            {"id": "jogo_68", "fase": "Grupos", "grupo": "L", "time_a": "Croácia", "time_b": "Gana", "data_hora": "2026-06-27 18:00"},
+            {"id": "jogo_69", "fase": "Grupos", "grupo": "K", "time_a": "Colômbia", "time_b": "Portugal", "data_hora": "2026-06-27 20:30"},
+            {"id": "jogo_70", "fase": "Grupos", "grupo": "K", "time_a": "República Democrática do Congo", "time_b": "Uzbequistão", "data_hora": "2026-06-27 20:30"},
+            {"id": "jogo_71", "fase": "Grupos", "grupo": "J", "time_a": "Argélia", "time_b": "Áustria", "data_hora": "2026-06-27 23:00"},
+            {"id": "jogo_72", "fase": "Grupos", "grupo": "J", "time_a": "Jordânia", "time_b": "Argentina", "data_hora": "2026-06-27 23:00"}
+        ]
+        
+        for jogo in JOGOS_BASE:
+            doc_ref = ref_jogos.document(jogo["id"])
+            batch.set(doc_ref, jogo)
+        
+        batch.commit()
+        
 def carregar_jogos():
     if not db: return []
     inicializar_jogos_no_banco()
