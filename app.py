@@ -177,7 +177,6 @@ def tela_autenticacao():
 
 # --- MOTOR DE INTERFACE DE JOGO ---
 def renderizar_jogo(jogo, email_usuario, nome_exibicao, modo_admin=False):
-    # Segurança caso um jogo do mata-mata ainda não tenha horário definido
     data_hora_str = jogo.get('data_hora', '2026-12-31 23:59')
     hora_jogo = datetime.strptime(data_hora_str, "%Y-%m-%d %H:%M")
     tempo_atual = datetime.now()
@@ -188,42 +187,62 @@ def renderizar_jogo(jogo, email_usuario, nome_exibicao, modo_admin=False):
     col_ref = db.collection("resultados_oficiais" if modo_admin else "palpites") if db else None
     dados_existentes = col_ref.document(doc_id).get().to_dict() if col_ref and col_ref.document(doc_id).get().exists else None
 
-    if dados_existentes and not modo_admin:
-        art_a = ", ".join(dados_existentes.get('artilheiros_a', [])) or "Nenhum"
-        art_b = ", ".join(dados_existentes.get('artilheiros_b', [])) or "Nenhum"
-        st.markdown(f"""
-        <div class="locked-box">
-            <b>🔒 Palpite Registrado</b><br>
-            <span style="font-size: 18px;">{jogo['time_a']} <b>{dados_existentes['placar_a']} x {dados_existentes['placar_b']}</b> {jogo['time_b']}</span><br>
-            <div class="gols-text">⚽ Gols {jogo['time_a']}: <i>{art_a}</i></div>
-            <div class="gols-text">⚽ Gols {jogo['time_b']}: <i>{art_b}</i></div>
-        </div>
-        """, unsafe_allow_html=True)
+    # Se o tempo esgotou e não é o admin
+    if jogo_bloqueado:
+        if dados_existentes:
+            art_a = ", ".join(dados_existentes.get('artilheiros_a', [])) or "Nenhum"
+            art_b = ", ".join(dados_existentes.get('artilheiros_b', [])) or "Nenhum"
+            st.markdown(f"""
+            <div class="locked-box">
+                <b>🔒 Jogo Bloqueado (Tempo Esgotado)</b><br>
+                <span style="font-size: 18px;">{jogo['time_a']} <b>{dados_existentes.get('placar_a',0)} x {dados_existentes.get('placar_b',0)}</b> {jogo['time_b']}</span><br>
+                <div class="gols-text">⚽ Gols {jogo['time_a']}: <i>{art_a}</i></div>
+                <div class="gols-text">⚽ Gols {jogo['time_b']}: <i>{art_b}</i></div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.warning(f"Tempo esgotado! As apostas fecharam em {limite_aposta.strftime('%d/%m às %H:%M')}. Pontuação: 0.")
         return
 
-    if jogo_bloqueado:
-        st.warning(f"Tempo esgotado! As apostas para este jogo fecharam em {limite_aposta.strftime('%d/%m às %H:%M')}. Pontuação: 0.")
-        return
+    # Se o tempo não esgotou, carrega os dados anteriores para edição (se existirem)
+    valor_ga = dados_existentes.get('placar_a', 0) if dados_existentes else 0
+    valor_gb = dados_existentes.get('placar_b', 0) if dados_existentes else 0
+
+    st.markdown(f"**{jogo['time_a']} x {jogo['time_b']}**")
+    if dados_existentes and not modo_admin:
+        st.info("Você já palpitou, mas pode alterar à vontade até 10 minutos antes do jogo.")
 
     c2, c3 = st.columns([1, 1])
-    ga = c2.number_input(f"Gols {jogo['time_a']}", min_value=0, step=1, key=f"ga_{jogo['id']}_{modo_admin}")
-    gb = c3.number_input(f"Gols {jogo['time_b']}", min_value=0, step=1, key=f"gb_{jogo['id']}_{modo_admin}")
+    ga = c2.number_input(f"Gols {jogo['time_a']}", min_value=0, step=1, value=valor_ga, key=f"ga_{jogo['id']}_{modo_admin}")
+    gb = c3.number_input(f"Gols {jogo['time_b']}", min_value=0, step=1, value=valor_gb, key=f"gb_{jogo['id']}_{modo_admin}")
     
     art_a, art_b = [], []
+    existentes_a = dados_existentes.get('artilheiros_a', []) if dados_existentes else []
+    existentes_b = dados_existentes.get('artilheiros_b', []) if dados_existentes else []
+
     if ga > 0 or gb > 0:
         c_art_a, c_art_b = st.columns(2)
         with c_art_a:
-            for i in range(ga): art_a.append(st.text_input(f"Gol {i+1} ({jogo['time_a']})", key=f"aa_{jogo['id']}_{i}_{modo_admin}"))
+            for i in range(ga): 
+                valor_padrao = existentes_a[i] if i < len(existentes_a) else ""
+                art_a.append(st.text_input(f"Gol {i+1} ({jogo['time_a']})", value=valor_padrao, key=f"aa_{jogo['id']}_{i}_{modo_admin}"))
         with c_art_b:
-            for i in range(gb): art_b.append(st.text_input(f"Gol {i+1} ({jogo['time_b']})", key=f"ab_{jogo['id']}_{i}_{modo_admin}"))
+            for i in range(gb): 
+                valor_padrao = existentes_b[i] if i < len(existentes_b) else ""
+                art_b.append(st.text_input(f"Gol {i+1} ({jogo['time_b']})", value=valor_padrao, key=f"ab_{jogo['id']}_{i}_{modo_admin}"))
 
     aviso_tempo = f"(Fecha às {limite_aposta.strftime('%H:%M')})"
-    if st.button("💾 Salvar Oficial" if modo_admin else f"✅ Confirmar Palpite {aviso_tempo}", key=f"btn_{jogo['id']}_{modo_admin}"):
-        if (ga > 0 and "" in art_a) or (gb > 0 and "" in art_b): st.error("Preencha o nome de todos os artilheiros!")
+    texto_botao = "💾 Atualizar Palpite" if dados_existentes else "✅ Confirmar Palpite"
+    if modo_admin:
+        texto_botao = "💾 Salvar Oficial"
+
+    if st.button(f"{texto_botao} {aviso_tempo if not modo_admin else ''}", key=f"btn_{jogo['id']}_{modo_admin}"):
+        if (ga > 0 and "" in art_a) or (gb > 0 and "" in art_b): 
+            st.error("Preencha o nome de todos os artilheiros!")
         elif db:
             col_ref.document(doc_id).set({"placar_a": ga, "placar_b": gb, "artilheiros_a": art_a, "artilheiros_b": art_b, "email": email_usuario, "nome_completo": nome_exibicao, "id_jogo": jogo['id']})
-            st.success("Palpite registrado permanentemente!"); st.rerun()
-
+            st.success("Salvo com sucesso!"); st.rerun()
+            
 # --- APLICATIVO PRINCIPAL ---
 if st.session_state.usuario_logado is None:
     tela_autenticacao()
